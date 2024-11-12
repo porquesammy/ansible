@@ -1,15 +1,4 @@
 ---
-# This playbook is designed to install and configure Zsh with Oh My Zsh, along with
-# my personal preferred plugins and the Powerlevel10k theme, on systems that use APT (Debian-based systems).
-# The playbook includes tasks to:
-# - Install Zsh and related packages (tmux, git, etc.)
-# - Set Zsh as the default shell
-# - Install and configure Oh My Zsh and plugins
-# - Set up the Powerlevel10k theme
-# 
-# This playbook will only run on systems using the APT package manager (e.g., Ubuntu, Debian).
-# If the system is not APT-based, the tasks will be skipped.
-
 - hosts: all
   become: true
   tasks:
@@ -32,7 +21,7 @@
         # Upgrade installed packages to the latest versions
         - name: Upgrade installed packages
           apt:
-            upgrade: dist # through upgrade (install new dependencies and delete obsolete packages)
+            upgrade: dist  # through upgrade (install new dependencies and delete obsolete packages)
             cache_valid_time: 3600  # Cache is valid for 1 hour
         
         # Install tmux
@@ -51,18 +40,26 @@
             name: zsh
             state: present
         
-        # Set Zsh as the default shell for the user
-        - name: Change shell to zsh
-          user:
-            name: "{{ ansible_user }}"
-            shell: "{{ ansible_env.HOME }}/.oh-my-zsh/tools/upgrade.sh"
+        # Set Zsh as the default shell for user
+        - name: Change user shell to zsh 
+          ansible.builtin.user:
+            name: "{{ ansible_user_id }}"
+            shell: /bin/zsh
     
-        # Install Oh My Zsh if not already installed
-        - name: Install ohmyzsh if not already installed
-          shell: |
-            if [ ! -d "$HOME/.oh-my-zsh" ]; then
-              curl -L https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh | sh
-            fi
+        # Check if .oh-my-zsh directory exists
+        - name: Check if .oh-my-zsh directory exists
+          stat:
+            path: "{{ ansible_env.HOME }}/.oh-my-zsh"
+          register: oh_my_zsh_dir
+        
+        # Install Oh My Zsh using git (only if not already installed)
+        - name: Install Oh My Zsh if not installed
+          git:
+            repo: 'https://github.com/ohmyzsh/ohmyzsh.git'
+            dest: "{{ ansible_env.HOME }}/.oh-my-zsh"
+            version: master
+            update: yes  # This will pull the latest changes if already installed
+          when: not oh_my_zsh_dir.stat.exists
         
         # Ensure Oh My Zsh plugins directory exists
         - name: Ensure oh-my-zsh plugins directory exists
@@ -73,41 +70,50 @@
         
         # Install the Zsh plugin auto-suggestions
         - name: Install zsh plugin auto-suggestions
-          ansible.builtin.git:
+          git:
             repo: 'https://github.com/zsh-users/zsh-autosuggestions.git'
             dest: "{{ ansible_env.HOME }}/.oh-my-zsh/plugins/zsh-autosuggestions"
         
         # Install the Zsh plugin auto-complete
         - name: Install zsh plugin auto-complete
-          ansible.builtin.git:
+          git:
             repo: 'https://github.com/marlonrichert/zsh-autocomplete.git'
             dest: "{{ ansible_env.HOME }}/.oh-my-zsh/plugins/zsh-autocomplete"
         
         # Install the Zsh plugin you-should-use
         - name: Install zsh plugin you-should-use
-          ansible.builtin.git:
+          git:
             repo: 'https://github.com/MichaelAquilina/zsh-you-should-use.git'
             dest: "{{ ansible_env.HOME }}/.oh-my-zsh/plugins/you-should-use"
         
         # Install Powerlevel10k theme for Zsh
         - name: Install theme powerlevel10k
-          ansible.builtin.git:
+          git:
             repo: 'https://github.com/romkatv/powerlevel10k.git'
             dest: "{{ ansible_env.HOME }}/.oh-my-zsh/themes/powerlevel10k"
-        
-        # Update .zshrc with the list of plugins to use
-        - name: Update zshrc with plugins
+
+        # Ensure .zshrc exists and add plugins line
+        - name: Ensure .zshrc contains plugins line
           lineinfile:
             path: "{{ ansible_env.HOME }}/.zshrc"
             regexp: '^plugins='
             line: 'plugins=(git zsh-autosuggestions zsh-autocomplete you-should-use)'
-            state: present
-        
-        # Update .zshrc to set Powerlevel10k as the theme
-        - name: Update zshrc with theme
+            create: yes
+
+        # Ensure .zshrc contains the Powerlevel10k theme line
+        - name: Ensure .zshrc contains Powerlevel10k theme line
           lineinfile:
             path: "{{ ansible_env.HOME }}/.zshrc"
             regexp: '^ZSH_THEME='
             line: 'ZSH_THEME="powerlevel10k/powerlevel10k"'
-            state: present
+            create: yes
+
+        # Ensure .zshrc contains the source line for Oh My Zsh
+        - name: Ensure .zshrc contains source line for oh-my-zsh
+          lineinfile:
+            path: "{{ ansible_env.HOME }}/.zshrc"
+            regexp: '^source \$ZSH/oh-my-zsh.sh'
+            line: 'source $ZSH/oh-my-zsh.sh'
+            create: yes
+
       when: ansible_pkg_mgr == 'apt'
